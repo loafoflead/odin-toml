@@ -1,0 +1,20 @@
+# comma
+
+string = "value"
+# 
+bool = true
+int = 10
+float = 82.2333333333337
+# datetime = 1979-05-27T00:32:00.999999
+# time = 00:32:00.999999
+# 
+# list = [1, 2, 3]
+# 
+# list2 = ["hi", "there"]
+# 
+# inline = { key = "yeah", thing=1 }
+# 
+# [table]
+# key1 = "hi"
+# key2 = 1
+# 

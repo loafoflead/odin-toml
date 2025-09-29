@@ -1,0 +1,70 @@
+# comma
+
+string = "value"
+ml_string = """
+Heyyyy
+I am so many lines!
+"""
+no_escape = 'hellooo\djsle\ef\f\ef\1\\f\\\'
+ml_no_escape = '''
+surely\ f\s\f\fse\f this is 
+too much
+'''
+bool = true
+int = 10
+int_detailed = +10
+int_detailed_but_negatvie = -10
+int_with_sep = 100_000___
+float = 82.2333333333337
+float_sci = 3e123
+# fractional
+flt1 = +1.0
+flt2 = 3.1415
+flt3 = -0.01
+
+# exponent
+flt4 = 5e+22
+flt5 = 1e06
+flt6 = -2E-2
+
+# both
+flt7 = 6.626e-34
+flt8 = 224_617.445_991_228
+
+sf1 = inf  # positive infinity
+sf2 = +inf # positive infinity
+sf3 = -inf # negative infinity
+
+# not a number
+sf4 = nan  # actual sNaN/qNaN encoding is implementation-specific
+sf5 = +nan # same as `nan`
+sf6 = -nan # valid, actual encoding is implementation-specific
+
+
+datetime = 1979-05-27T00:32:00.999999
+time = 00:32:00.999999
+
+list = [1, 2, 3]
+
+list2 = ["hi", "there"]
+
+mixed = ["strings", 12, "and ints"]
+
+can_do_this = [
+	1, 2,
+	3,
+]
+
+inline = { key = "yeah", thing=1 }
+
+[table]
+key1 = "hi"
+key2 = 1
+
+[[array_of_tables]]
+key = "hi"
+
+[[array_of_tables]]
+key = "bye"
+
+# makes like: { "array_of_tables" = [{key="hi"}, {key="bye"}] }
