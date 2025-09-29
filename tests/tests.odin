@@ -15,8 +15,14 @@ simple :: proc(t: ^testing.T) {
 	arena: vmem.Arena
 	allocator := vmem.arena_allocator(&arena)
 
-	toml, err := toml.parse_from_filepath("./tests/simple.toml", data_allocator = allocator)
+	data, err := toml.parse_from_filepath("./tests/simple.toml", data_allocator = allocator)
+	
 	testing.expect(t, err == .None)
+	testing.expect(t, len(data.super_table["list"].(toml.Toml_Array)) == 9)
+	testing.expect(t, data.super_table["bool"].(bool) == true)
+	testing.expect(t, data.super_table["other"].(toml.Toml_Map)["hi"].(int) == 1323)
+	testing.expect(t, data.super_table["string"].(string) == "value")
+	testing.expect(t, data.super_table["float"].(f64) - 82.233333333333337 < 0.01)
 
 	vmem.arena_destroy(&arena)
 }

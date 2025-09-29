@@ -14,7 +14,10 @@ list = [1, 2, 3, "hi", ["henlo", 1], 1.2, true, false, [1, 2, 3, [true, false]]]
 # 
 # inline = { key = "yeah", thing=1 }
 # 
-# [table]
-# key1 = "hi"
-# key2 = 1
+[table]
+key1 = "hi"
+key2 = 1
+
+[other]
+hi = 1323
 # 

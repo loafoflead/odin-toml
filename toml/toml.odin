@@ -59,6 +59,8 @@ Toml_Error :: union #no_nil {
 	os.Error,
 }
 
+// A TOML file consisting of any metadata about the file, and a super table
+// containing key-value pairs as well as lists and sub-tables.
 Toml_File :: struct {
 	super_table: Toml_Map,
 }
@@ -67,13 +69,11 @@ runes_to_key :: proc(s: []rune, allocator: runtime.Allocator) -> Toml_Key {
 	return Toml_Key(utf8.runes_to_string(s, allocator))
 }
 
+// Panics and displays the path, line, and column where it did
+// the arguments don't pass properly but the correct information is conveyed
 panicl :: proc(path: string, line, column: int, args: ..any) -> ! {
 	loc := fmt.tprintf("%s(%i:%i):", path, line, column)
 	log.panic(loc, args)
-}
-
-push_kv :: proc(toml: Toml_File, key: Toml_Key, value: Toml_Value) {
-
 }
 
 // Parses a TOML document from a filepath. It takes two allocator parameters, one for intermediate
@@ -103,6 +103,10 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 		Toml_Key, int
 	}
 
+	current_table_key: Toml_Key
+	current_table := &result.super_table
+	_current_table: Toml_Map
+
 	array_depth: int
 	array_keys: [dynamic]Array_Key = make([dynamic]Array_Key, len=MAX_ARRAY_DEPTH, cap=MAX_ARRAY_DEPTH, allocator = temp_allocator)
 	arrays: [dynamic]Toml_Array = make([dynamic]Toml_Array, len=MAX_ARRAY_DEPTH, cap=MAX_ARRAY_DEPTH, allocator = temp_allocator)
@@ -116,7 +120,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 
 	for i < len(content) {
 		c := content[i]
-		log.infof("%c", c)
+		// log.infof("%c", c)
 		// insane that this literally solves a problem i constantly have
 		// defer in Odin is the best there is and the best thing in the omniverse (probably)
 		defer {
@@ -139,7 +143,21 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 			case '"':
 				unimplemented("Declaration of a quoted key")
 			case '[':
-				unimplemented("Declaration of a table")
+				end_ident := strings.index(content[i:], "]")
+				value := content[i+1:i+end_ident]
+
+				current_table_key = Toml_Key(value)
+				result.super_table[current_table_key] = make(Toml_Map, data_allocator)
+				k_ptr, v_ptr, _, _ := map_entry(&result.super_table, current_table_key)
+				#partial switch &v in &result.super_table[current_table_key] {
+				case Toml_Map:
+					current_table = &v
+				case:
+					// compiler bug made me...
+					unreachable()
+				}
+
+				i += len(value)+1
 			case ' ', '\t', '\r':
 				continue
 			case:
@@ -172,7 +190,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								append(&arrays[array_depth-1], string(value))
 							}
 							else {
-								result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = string(value)
+								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = string(value)
 							}
 							clear(&value_buffer)
 							key_len = 0
@@ -218,7 +236,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 						case int:
 							append(&arrays[v], arrays[array_depth-1])
 						case Toml_Key:
-							result.super_table[v] = arrays[array_depth-1]
+							current_table[v] = arrays[array_depth-1]
 						}
 						array_depth -= 1
 						arrays[array_depth] = nil
@@ -273,7 +291,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								append(&arrays[array_depth-1], double)
 							}
 							else {
-								result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = double
+								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = double
 							}
 							clear(&value_buffer)
 							key_len = 0
@@ -287,7 +305,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								append(&arrays[array_depth-1], double)
 							}
 							else {
-								result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = double
+								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = double
 							}
 							clear(&value_buffer)
 							key_len = 0
@@ -303,7 +321,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								append(&arrays[array_depth-1], val)
 							}
 							else {
-								result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = val
+								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = val
 							}
 							clear(&value_buffer)
 							key_len = 0
@@ -320,6 +338,8 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 			}
 		}
 	}
+
+	// result.super_table[current_table_key] = current_table^
 
 	log.infof("%#v", result)
 
