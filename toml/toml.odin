@@ -19,7 +19,7 @@ import "core:unicode/utf8"
 import "core:log"
 import "core:fmt"
 
-Toml_Array :: []Toml_Value
+Toml_Array :: [dynamic]Toml_Value
 Toml_Map :: map[Toml_Key]Toml_Value
 
 Toml_Value :: union {
@@ -72,6 +72,10 @@ panicl :: proc(path: string, line, column: int, args: ..any) -> ! {
 	log.panic(loc, args)
 }
 
+push_kv :: proc(toml: Toml_File, key: Toml_Key, value: Toml_Value) {
+
+}
+
 // Parses a TOML document from a filepath. It takes two allocator parameters, one for intermediate
 // allocations and one that is used for the final data structure.
 parse_from_filepath :: proc(path: string, data_allocator := context.allocator, temp_allocator := context.temp_allocator) -> (result: Toml_File, err: Toml_Error) {
@@ -93,6 +97,15 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 
 	key_buffer: [LARGEST_KEY]rune
 	key_len: int
+	MAX_ARRAY_DEPTH :: 32
+
+	Array_Key :: union {
+		Toml_Key, int
+	}
+
+	array_depth: int
+	array_keys: [dynamic]Array_Key = make([dynamic]Array_Key, len=MAX_ARRAY_DEPTH, cap=MAX_ARRAY_DEPTH, allocator = temp_allocator)
+	arrays: [dynamic]Toml_Array = make([dynamic]Toml_Array, len=MAX_ARRAY_DEPTH, cap=MAX_ARRAY_DEPTH, allocator = temp_allocator)
 
 	value_type: Maybe(Toml_Value_Type)
 	value_buffer: [dynamic]u8 = make([dynamic]u8, temp_allocator)
@@ -103,7 +116,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 
 	for i < len(content) {
 		c := content[i]
-		// log.infof("%c", c)
+		log.infof("%c", c)
 		// insane that this literally solves a problem i constantly have
 		// defer in Odin is the best there is and the best thing in the omniverse (probably)
 		defer {
@@ -113,8 +126,9 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 		}
 
 		if skip_line && c != '\n' do continue
+			// log.infof("%c, %i, (%i, %i)", c, i, line, column)
 
-		if key_len == 0 {
+		if key_len == 0 && array_depth == 0 {
 			switch c {
 			case '#':
 				skip_line = true
@@ -151,8 +165,15 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					else if c == '"' {
 						if !escaping {
 							value_type = nil
+							value := make([]u8, len(value_buffer), data_allocator)
+							copy_from_string(value, string(value_buffer[:]))
 							// TODO: dont do this pointless back & forth |b| runes & string
-							result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = string(value_buffer[:])
+							if array_depth > 0 {
+								append(&arrays[array_depth-1], string(value))
+							}
+							else {
+								result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = string(value)
+							}
 							clear(&value_buffer)
 							key_len = 0
 							continue
@@ -172,7 +193,9 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					else {
 						append(&value_buffer, c)
 					}
-				case .Bool, .Int, .Float, .Date_Time, .Time, .Array, .Map:
+				case .Int, .Float, .Bool:
+					// these are parsed automatically upon detection
+				case .Date_Time, .Time, .Array, .Map:
 					unimplemented(fmt.tprintf("Parse value of type %v", type))
 				}
 			}
@@ -188,10 +211,37 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					unimplemented("Literal string values")
 				case '+','-':
 					unimplemented("Leading signs for number types")
+				case ']':
+					log.infof("%#v, %#v, %i", array_keys, arrays, array_depth)
+					if array_depth > 0 {
+						switch v in array_keys[array_depth-1] {
+						case int:
+							append(&arrays[v], arrays[array_depth-1])
+						case Toml_Key:
+							result.super_table[v] = arrays[array_depth-1]
+						}
+						array_depth -= 1
+						arrays[array_depth] = nil
+						// remove(&arrays, array_depth-1)
+						key_len = 0
+					}
+					else do panicl(path, line, column, "Should not be closing array before opening it, my bad")
 				case '[':
-					value_type = .Array
+					value_type = nil
+					array_depth += 1
+					arrays[array_depth-1] = make(Toml_Array, data_allocator)
+					if array_depth == 1 {
+						array_keys[array_depth-1] = runes_to_key(key_buffer[:key_len], data_allocator)
+					}
+					else {
+						array_keys[array_depth-1] = array_depth-2
+					}
+					// why am i coding this like its 1981
+					key_len = 0
 				case '{':
 					value_type = .Map
+				case ',':
+					continue
 				case ' ', '\t', '\r':
 					continue
 				case:
@@ -200,7 +250,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					//		  v
 					// [..][..][..][..]
 
-					newline := strings.index(content[i:], "\n")
+					newline := strings.index_any(content[i:], "\n,]")
 					value := content[i:i+newline]
 					c, _idk_what_this_is := utf8.decode_rune_in_bytes(transmute([]u8)value[0:1])
 					// log.infof("-------> %c, %v, %v", c, result, key_buffer)
@@ -219,8 +269,12 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 							double, ok := strconv.parse_f64(value)
 							if !ok do panicl(path, line, column, "Expected a float but could not parse", value)
 							value_type = nil
-							// TODO: dont do this pointless back & forth |b| runes & string
-							result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = double
+							if array_depth > 0 {
+								append(&arrays[array_depth-1], double)
+							}
+							else {
+								result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = double
+							}
 							clear(&value_buffer)
 							key_len = 0
 							i += len(value)-1
@@ -229,8 +283,12 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 							double, ok := strconv.parse_int(value)
 							if !ok do panicl(path, line, column, "Expected an int but could not parse", value)
 							value_type = nil
-							// TODO: dont do this pointless back & forth |b| runes & string
-							result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = double
+							if array_depth > 0 {
+								append(&arrays[array_depth-1], double)
+							}
+							else {
+								result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = double
+							}
 							clear(&value_buffer)
 							key_len = 0
 							i += len(value)-1
@@ -241,8 +299,12 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 						case "true", "false":
 							val := true if value == "true" else false
 							value_type = nil
-							// TODO: dont do this pointless back & forth |b| runes & string
-							result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = val
+							if array_depth > 0 {
+								append(&arrays[array_depth-1], val)
+							}
+							else {
+								result.super_table[runes_to_key(key_buffer[:key_len], data_allocator)] = val
+							}
 							clear(&value_buffer)
 							key_len = 0
 							i += len(value)-1
@@ -259,7 +321,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 		}
 	}
 
-	log.info(result)
+	log.infof("%#v", result)
 
 	return
 }
