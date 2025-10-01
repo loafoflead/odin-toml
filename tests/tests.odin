@@ -16,6 +16,10 @@ simple :: proc(t: ^testing.T) {
 	allocator := vmem.arena_allocator(&arena)
 
 	data, err := toml.parse_from_filepath("./tests/simple.toml", data_allocator = allocator)
+
+	inline := make(map[toml.Toml_Key]toml.Toml_Value)
+	defer delete(inline)
+	inline["key"] = "yeah"
 	
 	testing.expect(t, err == .None)
 	testing.expect(t, len(data.super_table["list"].(toml.Toml_Array)) == 9)
@@ -23,6 +27,7 @@ simple :: proc(t: ^testing.T) {
 	testing.expect(t, data.super_table["other"].(toml.Toml_Map)["hi"].(int) == 1323)
 	testing.expect(t, data.super_table["string"].(string) == "value")
 	testing.expect(t, data.super_table["float"].(f64) - 82.233333333333337 < 0.01)
+	testing.expect(t, data.super_table["inline"].(toml.Toml_Map)["key"].(string) == inline["key"].(string))
 
 	vmem.arena_destroy(&arena)
 }

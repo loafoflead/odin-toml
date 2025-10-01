@@ -12,7 +12,7 @@ list = [1, 2, 3, "hi", ["henlo", 1], 1.2, true, false, [1, 2, 3, [true, false]]]
 # 
 # list2 = ["hi", "there"]
 # 
-# inline = { key = "yeah", thing=1 }
+inline = { key = "yeah", hi = 1, j = 12.2, pls = [1, 2, 3], mom_of_tru = {key="value"} }
 # 
 [table]
 key1 = "hi"

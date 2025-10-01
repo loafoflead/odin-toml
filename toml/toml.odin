@@ -1,3 +1,6 @@
+/*
+	TODO: documentation overview
+*/
 package toml
 
 /*
@@ -111,6 +114,11 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 	array_keys: [dynamic]Array_Key = make([dynamic]Array_Key, len=MAX_ARRAY_DEPTH, cap=MAX_ARRAY_DEPTH, allocator = temp_allocator)
 	arrays: [dynamic]Toml_Array = make([dynamic]Toml_Array, len=MAX_ARRAY_DEPTH, cap=MAX_ARRAY_DEPTH, allocator = temp_allocator)
 
+	preinline_map: ^Toml_Map
+	inline_maps_depth: int
+	inline_map_keys := make([dynamic]Toml_Key, len=MAX_ARRAY_DEPTH, cap=MAX_ARRAY_DEPTH, allocator = temp_allocator)
+	inline_maps: map[Toml_Key]^Toml_Map = make(map[Toml_Key]^Toml_Map, allocator = temp_allocator)
+
 	value_type: Maybe(Toml_Value_Type)
 	value_buffer: [dynamic]u8 = make([dynamic]u8, temp_allocator)
 
@@ -120,7 +128,8 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 
 	for i < len(content) {
 		c := content[i]
-		// log.infof("%c", c)
+		// log.infof("(%i, %i) %c, in_array: %v, in_map: %v, key: %v, value_type: %v, skipping: %v", line, column, c, array_depth > 0, inline_maps_depth > 0, key_buffer[:key_len], value_type, skip_line)
+
 		// insane that this literally solves a problem i constantly have
 		// defer in Odin is the best there is and the best thing in the omniverse (probably)
 		defer {
@@ -136,6 +145,18 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 			switch c {
 			case '#':
 				skip_line = true
+			case '}':
+				if inline_maps_depth > 0 {
+					if inline_maps_depth == 1 do current_table = preinline_map
+					else {
+						current_table = inline_maps[inline_map_keys[inline_maps_depth-1]]
+					}
+
+					inline_maps_depth -= 1
+				}
+				else {
+					panicl(path, line, column, "did not expect table closing here")
+				}
 			case '\n':
 				line += 1
 				column = 1
@@ -158,7 +179,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 				}
 
 				i += len(value)+1
-			case ' ', '\t', '\r':
+			case ' ', '\t', '\r', ',':
 				continue
 			case:
 				// keys can have unicode in them, so we need runes
@@ -190,7 +211,10 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								append(&arrays[array_depth-1], string(value))
 							}
 							else {
-								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = string(value)
+								/*if inline_maps_depth > 0 {
+									inline_maps[inline_map_keys[inline_maps_depth-1]] = string(value)
+								}
+								else do */current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = string(value)
 							}
 							clear(&value_buffer)
 							key_len = 0
@@ -230,7 +254,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 				case '+','-':
 					unimplemented("Leading signs for number types")
 				case ']':
-					log.infof("%#v, %#v, %i", array_keys, arrays, array_depth)
+					// log.infof("%#v, %#v, %i", array_keys, arrays, array_depth)
 					if array_depth > 0 {
 						switch v in array_keys[array_depth-1] {
 						case int:
@@ -257,7 +281,25 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					// why am i coding this like its 1981
 					key_len = 0
 				case '{':
-					value_type = .Map
+					value_type = nil
+					inline_maps_depth += 1
+					if inline_maps_depth == 1 {
+						preinline_map = current_table
+					}
+					key := runes_to_key(key_buffer[:key_len], data_allocator)
+					
+					inline_map_keys[inline_maps_depth-1] = key
+					current_table[key] = make(Toml_Map, data_allocator)
+					#partial switch &v in &current_table[key] {
+					case Toml_Map:
+						inline_maps[key] = &v
+						current_table = &v
+					case:
+						// compiler bug made me...
+						unreachable()
+					}
+					
+					key_len = 0
 				case ',':
 					continue
 				case ' ', '\t', '\r':
@@ -268,8 +310,8 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					//		  v
 					// [..][..][..][..]
 
-					newline := strings.index_any(content[i:], "\n,]")
-					value := content[i:i+newline]
+					newline := strings.index_any(content[i:], "\n,]}")
+					value := strings.trim(content[i:i+newline], " ")
 					c, _idk_what_this_is := utf8.decode_rune_in_bytes(transmute([]u8)value[0:1])
 					// log.infof("-------> %c, %v, %v", c, result, key_buffer)
 
