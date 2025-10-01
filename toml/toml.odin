@@ -11,6 +11,7 @@ package toml
 
 import "base:runtime"
 
+import "core:time"
 import "core:time/datetime"
 import "core:os"
 import "core:strings"
@@ -34,7 +35,7 @@ Toml_Value :: union {
 	// theres a book https://pkg.odin-lang.org/core/time/datetime/#Time, 
 	// https://github.com/odin-lang/Odin/blob/9b4c0ea4920ea70b3e9206979aa7fd36608c4837/core/time/datetime/datetime.odin#L4
 	datetime.DateTime,
-	datetime.Time,
+	time.Time,
 	Toml_Array,
 	Toml_Map,
 }
@@ -323,7 +324,40 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 						// no---
 						// AND I'D DO IT AGAIN IF I HAD THE CHANCE!!!!!
 						if strings.contains(value, ":") || strings.contains(value, "-") {
-							unimplemented("datetime or time")
+							val: Toml_Value
+							dt, utc_offset, is_leap, consumed := time.rfc3339_to_components(value)
+							val = dt
+							// log.info(value, dt)
+							err := datetime.validate_datetime(dt)
+							if err != nil {
+								sb := strings.builder_make(allocator=temp_allocator)
+								strings.write_string(&sb, "1970-01-01T")
+								strings.write_string(&sb, value)
+								s := strings.to_string(sb)
+								nt, consumed := time.rfc3339_to_time_utc(s)
+								val = nt
+								// log.info(s, nt)
+								// serr := datetime.validate_time(transmute(datetime.Time)nt)
+								// if serr != nil {
+								// 	strings.builder_reset(&sb)
+								// 	strings.write_string(&sb, value)
+								// 	strings.write_string(&sb, "T00:00:00")
+								// 	s = strings.to_string(sb)
+								// 	date, _, _, _ := time.rfc3339_to_components(s)
+								// 	log.info(s, date)
+								// 	gerr := datetime.validate_datetime(date)
+								// 	panicl(path, line, column, fmt.tprintf("Invalid datetime format: %v", gerr))
+								// }
+							}
+							if array_depth > 0 {
+								append(&arrays[array_depth-1], val)
+							}
+							else {
+								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = val
+							}
+							clear(&value_buffer)
+							key_len = 0
+							i += len(value)-1
 						}
 						else if strings.contains(value, ".") {
 							double, ok := strconv.parse_f64(value)

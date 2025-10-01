@@ -5,8 +5,8 @@ string = "value"
 bool = true
 int = 10
 float = 82.2333333333337
-# datetime = 1979-05-27T00:32:00.999999
-# time = 00:32:00.999999
+datetime = 1979-05-27T00:32:00.999999
+time = 00:32:00.999999
 # 
 list = [1, 2, 3, "hi", ["henlo", 1], 1.2, true, false, [1, 2, 3, [true, false]]]
 # 
