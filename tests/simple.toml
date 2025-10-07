@@ -12,7 +12,7 @@ yap.pay = "hi"
 yap.boop.king = 123424
 yap.boop.goop = 1.1
 yap.deep = {hi = true, jeep = 1}
-# yap.deep.gurl = "luv"
+yap.deep.gurl = "luv"
 #yap.king = [1, 2, 3]
 
 

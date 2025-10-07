@@ -209,12 +209,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					key_len += 1
 					idx += 1
 				}
-				// if key_depth > 0 {
-				// 	key_depth += 1
-				// 	key := runes_to_key(key_buffer[:key_len], data_allocator)
-				// 	append(&key_parents, key)
-				// }
-				log.infof("%#v", key_parents)
+				log.infof("%#v -> %s", key_parents, key_buffer[:key_len])
 				log.error(key_parents)
 				// TODO: i bet this will be the source of an error, mark my words
 				i += key_len		
@@ -244,7 +239,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								og := current_table
 								if key_depth > 0 {
 									for papi in key_parents {
-										current_table[papi] = make(Toml_Map, data_allocator)
+										if _, ok:=current_table[papi]; !ok do current_table[papi] = make(Toml_Map, data_allocator)
 										#partial switch &v in &current_table[papi] {
 										case Toml_Map:
 											current_table = &v
@@ -334,7 +329,23 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					
 					inline_map_keys[inline_maps_depth-1] = key
 
+					// og := current_table
+					if key_depth > 0 {
+						for papi in key_parents {
+							if _, ok:=current_table[papi]; !ok do current_table[papi] = make(Toml_Map, data_allocator)
+							#partial switch &v in &current_table[papi] {
+							case Toml_Map:
+								current_table = &v
+							case:
+								// compiler bug made me...
+								unreachable()
+							}
+						}
+						key_depth = 0
+						clear(&key_parents)
+					}
 					if _, ok:=current_table[key]; !ok do current_table[key] = make(Toml_Map, data_allocator)
+					// current_table = og
 
 					#partial switch &v in &current_table[key] {
 					case Toml_Map:
