@@ -1,15 +1,23 @@
 # comma
 
 string = "value"
+escaped = "va\nlue"
+raw = 'va\nlue'
+ml = """
+yo
+"""
+ml_raw = '''
+yurt my gurt i'm so RAW RN
+'''
 # 
 bool = true
-int = 10
+int = -10
 float = 82.2333333333337
 datetime = 1979-05-27T00:32:00.999999
 time = 00:32:00.999999
 
 yap.pay = "hi"
-yap.boop.king = 123424
+yap.boop.king = 123_4_24
 yap.boop.goop = 1.1
 yap.deep = {hi = true, jeep = 1}
 yap.deep.gurl = "luv"
@@ -17,7 +25,9 @@ yap.deep.gurl = "luv"
 
 
 # 
-list = [1, 2, 3, "hi", ["henlo", 1], 1.2, true, false, [1, 2, 3, [true, false]]]
+list = [
+	1, 2, 3, "hi", ["henlo", 1], 1.2, true, false, [1, 2, 3, [true, false]]
+]
 # 
 # list2 = ["hi", "there"]
 # 

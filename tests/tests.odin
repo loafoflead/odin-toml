@@ -28,6 +28,8 @@ simple :: proc(t: ^testing.T) {
 	testing.expect(t, data.super_table["string"].(string) == "value")
 	testing.expect(t, data.super_table["float"].(f64) - 82.233333333333337 < 0.01)
 	testing.expect(t, data.super_table["inline"].(toml.Toml_Map)["key"].(string) == inline["key"].(string))
+	testing.expect(t, data.super_table["escaped"].(string) == "va\nlue")
+	testing.expect(t, data.super_table["raw"].(string) == "va\\nlue")
 
 	vmem.arena_destroy(&arena)
 }

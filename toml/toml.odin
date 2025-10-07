@@ -42,6 +42,7 @@ Toml_Value :: union {
 
 Toml_Value_Type :: enum {
 	String,
+	Raw_String,
 	Int,
 	Float,
 	Bool,
@@ -130,7 +131,13 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 
 	// string
 	escaping: bool
+	multi_line: bool
 	// end-string
+
+	// numbers
+	Signum :: int
+	leading_sign: Maybe(Signum)
+	//
 
 	for i < len(content) {
 		c := content[i]
@@ -209,8 +216,7 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					key_len += 1
 					idx += 1
 				}
-				log.infof("%#v -> %s", key_parents, key_buffer[:key_len])
-				log.error(key_parents)
+				// log.infof("%#v -> %s", key_parents, key_buffer[:key_len])
 				// TODO: i bet this will be the source of an error, mark my words
 				i += key_len		
 			}
@@ -218,12 +224,23 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 		else { // key found
 			if type, ok := value_type.?; ok {
 				switch type {
-				case .String:
-					if c == '\\' {
+				case .String, .Raw_String:
+					if type != .Raw_String && c == '\\' {
 						escaping = true
+						continue
 					}
-					else if c == '"' {
-						if !escaping {
+					else if c == '"' || (type == .Raw_String && c == '\'') {
+						end := true
+						if multi_line {
+							if !(len(content) > i + 3 && ((content[i+1] == '"' && content[i+2] == '"') || (type == .Raw_String && content[i+1] == '\'' && content[i+2] == '\''))) {
+								end = false
+							}
+							else {
+								i += 1 if escaping else 2
+							}
+						}
+						if end && !escaping {
+							multi_line = false
 							value_type = nil
 							value := make([]u8, len(value_buffer), data_allocator)
 							copy_from_string(value, string(value_buffer[:]))
@@ -260,13 +277,14 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 							continue
 						}
 					}
+
 					if escaping {
 						switch c {
 						case '"': append(&value_buffer, '"')
 						case 'n': append(&value_buffer, '\n')
 						case 't': append(&value_buffer, '\t')
 						case:
-							unimplemented(fmt.tprintf("Escape '\\%s'", c))
+							unimplemented(fmt.tprintf("Escape '\\%c'", c))
 						}
 						// TODO: are there any multi-line escapes?
 						escaping = false
@@ -285,13 +303,23 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 				case '#':
 					panicl(path, line, column, "Declarations must be of the form key = value, unexpected comment found")
 				case '\n':
-					panicl(path, line, column, "Declarations must be on the same line")
+					if array_depth == 0 {
+						panicl(path, line, column, "Declarations must be on the same line")
+					}
 				case '"':
+					if len(content) > i + 3 && content[i+1] == '"' && content[i+2] == '"' {
+						multi_line = true
+						i += 2
+					}
 					value_type = .String
 				case '\'':
-					unimplemented("Literal string values")
+					if len(content) > i + 3 && content[i+1] == '\'' && content[i+2] == '\'' {
+						multi_line = true
+						i += 2
+					}
+					value_type = .Raw_String
 				case '+','-':
-					unimplemented("Leading signs for number types")
+					leading_sign = +1 if c == '+' else -1
 				case ']':
 					// log.infof("%#v, %#v, %i", array_keys, arrays, array_depth)
 					if array_depth > 0 {
@@ -438,9 +466,12 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 							i += len(value)-1
 						}
 						else if strings.contains(value, ".") {
-							double, ok := strconv.parse_f64(value)
-							if !ok do panicl(path, line, column, "Expected a float but could not parse", value)
+							real_value, _ := strings.replace(value, "_", "", -1, allocator=temp_allocator)
+							double, ok := strconv.parse_f64(real_value)
+							if !ok do panicl(path, line, column, "Expected a float but could not parse", real_value)
 							value_type = nil
+							if sign, ok := leading_sign.?; ok do double *= f64(sign)
+							leading_sign = nil
 							if array_depth > 0 {
 								append(&arrays[array_depth-1], double)
 							}
@@ -468,9 +499,12 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 							i += len(value)-1
 						}
 						else {
-							double, ok := strconv.parse_int(value)
-							if !ok do panicl(path, line, column, "Expected an int but could not parse", value)
+							real_value, _ := strings.replace(value, "_", "", -1, allocator=temp_allocator)
+							double, ok := strconv.parse_int(real_value)
+							if !ok do panicl(path, line, column, "Expected an int but could not parse", real_value)
 							value_type = nil
+							if sign, ok := leading_sign.?; ok do double *= int(sign)
+							leading_sign = nil
 							if array_depth > 0 {
 								append(&arrays[array_depth-1], double)
 							}
