@@ -7,6 +7,14 @@ The implementation is close to the spec, but not quite there, here is a list of 
 
 To build and run the tests, just use `odin test tests/`. I'm assuming you have the Odin compiler and know what the language is, otherwise check out the [Overview](https://odin-lang.org/docs/overview/) for an idea, and the [site](https://odin-lang.org) for installation instructions. 
 
+## For those interesting in actually good parsers:
+
+- https://github.com/mkozhukh/odin-toml -- Probably the best one out there, spec compliant and supports marshalling and unmarshalling with a simple interface.
+- https://codeberg.org/spindlebink/toml-odin -- Bindings to the [tomlc99](https://github.com/cktan/tomlc99) library in Odin, professional.
+- https://gitlab.com/froge/toml-odin -- Not totally spec compliant but quite clean code that looks like it would be nice for hacking at, a stepping parser too allowing the user to do their own step parsing (like the visitor pattern).
+
+If you know of any others that you think should be on this list of better parsers on this parser's github page that shan't be seen by anybody, feel free to make an issue (/hj).
+
 ## Example:
 
 simple.toml
@@ -45,3 +53,11 @@ The best way anyone can contribute to this project would be to rewrite it from s
 
 - [ ] List tables (\[\[table\]\] type of thing)
 - [ ] nan, inf being parsed as 'keywords'
+
+## TODOs:
+
+- [X] Make inline maps less janky
+- [ ] Unmarshalling and Marshalling
+- [ ] Break up parsing into steps, notably to allow you to jump key-value pair by key-value pair
+- [ ] If possible when parsing into steps, make it so you can 'stream' in the input to control allocations
+- [ ] Finish supporting the spec
