@@ -80,6 +80,8 @@ panicl :: proc(path: string, line, column: int, args: ..any) -> ! {
 	log.panic(loc, args)
 }
 
+// @TODO: could prob lowkbert just use an arena that is part of Toml_File struct
+
 // Parses a TOML document from a filepath. It takes two allocator parameters, one for intermediate
 // allocations and one that is used for the final data structure.
 parse_from_filepath :: proc(path: string, data_allocator := context.allocator, temp_allocator := context.temp_allocator) -> (result: Toml_File, err: Toml_Error) {
@@ -98,6 +100,9 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 	skip_line := false
 
 	LARGEST_KEY::64
+
+	key_depth: int
+	key_parents := make([dynamic]Toml_Key, allocator=data_allocator)
 
 	key_buffer: [LARGEST_KEY]rune
 	key_len: int
@@ -169,7 +174,8 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 				value := content[i+1:i+end_ident]
 
 				current_table_key = Toml_Key(value)
-				result.super_table[current_table_key] = make(Toml_Map, data_allocator)
+
+				if _, ok:=result.super_table[current_table_key]; !ok do result.super_table[current_table_key] = make(Toml_Map, data_allocator)
 				k_ptr, v_ptr, _, _ := map_entry(&result.super_table, current_table_key)
 				#partial switch &v in &result.super_table[current_table_key] {
 				case Toml_Map:
@@ -183,14 +189,33 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 			case ' ', '\t', '\r', ',':
 				continue
 			case:
+				idx: int
 				// keys can have unicode in them, so we need runes
 				for r, i in content[i:] {
 					if unicode.is_white_space(r) || r == '=' do break
-					if i > len(key_buffer)-1 do panicl(path, line, column, "Key must (for now) be less than", len(key_buffer), "runes.")
 
-					key_buffer[i] = r
-					key_len = i+1
+					if r == '.' {
+						key_depth += 1
+						key := runes_to_key(key_buffer[:key_len], data_allocator)
+						append(&key_parents, key)
+						key_len = 0
+						idx = 0
+						continue
+					}
+
+					if idx > len(key_buffer)-1 do panicl(path, line, column, "Key must (for now) be less than", len(key_buffer), "runes.")
+
+					key_buffer[idx] = r
+					key_len += 1
+					idx += 1
 				}
+				// if key_depth > 0 {
+				// 	key_depth += 1
+				// 	key := runes_to_key(key_buffer[:key_len], data_allocator)
+				// 	append(&key_parents, key)
+				// }
+				log.infof("%#v", key_parents)
+				log.error(key_parents)
 				// TODO: i bet this will be the source of an error, mark my words
 				i += key_len		
 			}
@@ -215,7 +240,25 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								/*if inline_maps_depth > 0 {
 									inline_maps[inline_map_keys[inline_maps_depth-1]] = string(value)
 								}
-								else do */current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = string(value)
+								else do */
+								og := current_table
+								if key_depth > 0 {
+									for papi in key_parents {
+										current_table[papi] = make(Toml_Map, data_allocator)
+										#partial switch &v in &current_table[papi] {
+										case Toml_Map:
+											current_table = &v
+										case:
+											// compiler bug made me...
+											unreachable()
+										}
+									}
+									key_depth = 0
+									clear(&key_parents)
+								}
+
+								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = string(value)
+								current_table = og
 							}
 							clear(&value_buffer)
 							key_len = 0
@@ -290,7 +333,9 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					key := runes_to_key(key_buffer[:key_len], data_allocator)
 					
 					inline_map_keys[inline_maps_depth-1] = key
-					current_table[key] = make(Toml_Map, data_allocator)
+
+					if _, ok:=current_table[key]; !ok do current_table[key] = make(Toml_Map, data_allocator)
+
 					#partial switch &v in &current_table[key] {
 					case Toml_Map:
 						inline_maps[key] = &v
@@ -312,7 +357,11 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					// [..][..][..][..]
 
 					newline := strings.index_any(content[i:], "\n,]}")
-					value := strings.trim(content[i:i+newline], " ")
+					slice: string
+					if newline == -1 do slice = content[i:]
+					else do slice = content[i:i+newline]
+					// log.infof("\n----\n%s\n----\n",content[i:])
+					value := strings.trim(slice, " ")
 					c, _idk_what_this_is := utf8.decode_rune_in_bytes(transmute([]u8)value[0:1])
 					// log.infof("-------> %c, %v, %v", c, result, key_buffer)
 
@@ -353,7 +402,25 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								append(&arrays[array_depth-1], val)
 							}
 							else {
+								og := current_table
+								if key_depth > 0 {
+									for papi in key_parents {
+										if _, ok:=current_table[papi]; !ok do current_table[papi] = make(Toml_Map, data_allocator)
+
+										#partial switch &v in &current_table[papi] {
+										case Toml_Map:
+											current_table = &v
+										case:
+											// compiler bug made me...
+											unreachable()
+										}
+									}
+									key_depth = 0
+									clear(&key_parents)
+								}
+
 								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = val
+								current_table = og
 							}
 							clear(&value_buffer)
 							key_len = 0
@@ -367,7 +434,23 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								append(&arrays[array_depth-1], double)
 							}
 							else {
+								og := current_table
+								if key_depth > 0 {
+									for papi in key_parents {
+										if _, ok:=current_table[papi]; !ok do current_table[papi] = make(Toml_Map, data_allocator)
+										#partial switch &v in &current_table[papi] {
+										case Toml_Map:
+											current_table = &v
+										case:
+											// compiler bug made me...
+											unreachable()
+										}
+									}
+									key_depth = 0
+									clear(&key_parents)
+								}
 								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = double
+								current_table = og
 							}
 							clear(&value_buffer)
 							key_len = 0
@@ -381,7 +464,23 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								append(&arrays[array_depth-1], double)
 							}
 							else {
+								og := current_table
+								if key_depth > 0 {
+									for papi in key_parents {
+										if _, ok:=current_table[papi]; !ok do current_table[papi] = make(Toml_Map, data_allocator)
+										#partial switch &v in &current_table[papi] {
+										case Toml_Map:
+											current_table = &v
+										case:
+											// compiler bug made me...
+											unreachable()
+										}
+									}
+									key_depth = 0
+									clear(&key_parents)
+								}
 								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = double
+								current_table = og
 							}
 							clear(&value_buffer)
 							key_len = 0
@@ -397,7 +496,24 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 								append(&arrays[array_depth-1], val)
 							}
 							else {
+								og := current_table
+								if key_depth > 0 {
+									for papi in key_parents {
+										if _, ok:=current_table[papi]; !ok do current_table[papi] = make(Toml_Map, data_allocator)
+
+										#partial switch &v in &current_table[papi] {
+										case Toml_Map:
+											current_table = &v
+										case:
+											// compiler bug made me...
+											unreachable()
+										}
+									}
+									key_depth = 0
+									clear(&key_parents)
+								}
 								current_table[runes_to_key(key_buffer[:key_len], data_allocator)] = val
+								current_table = og
 							}
 							clear(&value_buffer)
 							key_len = 0

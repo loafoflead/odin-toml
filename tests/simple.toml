@@ -7,6 +7,15 @@ int = 10
 float = 82.2333333333337
 datetime = 1979-05-27T00:32:00.999999
 time = 00:32:00.999999
+
+yap.pay = "hi"
+yap.boop.king = 123424
+yap.boop.goop = 1.1
+yap.deep = {hi = true, jeep = 1}
+# yap.deep.gurl = "luv"
+#yap.king = [1, 2, 3]
+
+
 # 
 list = [1, 2, 3, "hi", ["henlo", 1], 1.2, true, false, [1, 2, 3, [true, false]]]
 # 
@@ -20,4 +29,6 @@ key2 = 1
 
 [other]
 hi = 1323
-# 
+
+[yap]
+ki = "lop"
