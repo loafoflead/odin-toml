@@ -7,7 +7,7 @@ import vmem "core:mem/virtual"
 @test
 empty :: proc(t: ^testing.T) {
 	toml, err := toml.parse_from_filepath("./tests/empty.toml")
-	testing.expect(t, err == .None)
+	testing.expect(t, err == nil)
 }
 
 @test
@@ -21,7 +21,7 @@ simple :: proc(t: ^testing.T) {
 	defer delete(inline)
 	inline["key"] = "yeah"
 	
-	testing.expect(t, err == .None)
+	testing.expect(t, err == nil)
 	testing.expect(t, len(data.super_table["list"].(toml.Toml_Array)) == 9)
 	testing.expect(t, data.super_table["bool"].(bool) == true)
 	testing.expect(t, data.super_table["other"].(toml.Toml_Map)["hi"].(i64) == 1323)

@@ -57,11 +57,18 @@ Toml_Key :: distinct string
 Toml_Parse_Error :: enum {
 	None,
 	Failed_To_Read,
+	Int_Parse_Error,
+	Float_Parse_Error,
+	Array_Close_Before_Open,
+	Close_Table_Before_Open,
+	Key_Too_Long,
+	Syntax_Error_Decl_Comment,
+	Syntax_Error_Decl_Linebreak,
 }
 
-Toml_Error :: union #no_nil {
-	Toml_Parse_Error,
-	os.Error,
+// This is a union so we can have a nil value
+Toml_Error :: union {
+	Toml_Parse_Error
 }
 
 // A TOML file consisting of any metadata about the file, and a super table
@@ -74,14 +81,13 @@ runes_to_key :: proc(s: []rune, allocator: runtime.Allocator) -> Toml_Key {
 	return Toml_Key(utf8.runes_to_string(s, allocator))
 }
 
-// Panics and displays the path, line, and column where it did
+// Errors and displays the path, line, and column where it did
 // the arguments don't pass properly but the correct information is conveyed
-panicl :: proc(path: string, line, column: int, args: ..any) -> ! {
+errorl :: proc(path: string, line, column: int, args: ..any) -> bool {
 	loc := fmt.tprintf("%s(%i:%i):", path, line, column)
-	log.panic(loc, args)
+	log.error(loc, args)
+	return false
 }
-
-// @TODO: could prob lowkbert just use an arena that is part of Toml_File struct
 
 // Parses a TOML document from a filepath. It takes two allocator parameters, one for intermediate
 // allocations and one that is used for the final data structure.
@@ -92,8 +98,11 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 	content := string(data)
 	content_runes := utf8.string_to_runes(content, temp_allocator)
 	if len(content) == 0 do err = .None
-	// lines := strings.split_lines(content, allocator)
 
+	return parse_from_string(content, path, data_allocator, temp_allocator)
+}
+
+parse_from_string :: proc(content: string, path: string = "unspecified", data_allocator := context.allocator, temp_allocator := context.temp_allocator) -> (result: Toml_File, err: Toml_Error) {
 	result.super_table = make(Toml_Map, data_allocator)
 
 	line, column, i, ir := 1, 1, 0, 0
@@ -168,7 +177,9 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 					inline_maps_depth -= 1
 				}
 				else {
-					panicl(path, line, column, "did not expect table closing here")
+					errorl(path, line, column, "did not expect table closing here")
+					err = .Close_Table_Before_Open
+					return
 				}
 			case '\n':
 				line += 1
@@ -210,7 +221,11 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 						continue
 					}
 
-					if idx > len(key_buffer)-1 do panicl(path, line, column, "Key must (for now) be less than", len(key_buffer), "runes.")
+					if idx > len(key_buffer)-1 {
+						errorl(path, line, column, "Key must (for now) be less than", len(key_buffer), "runes.")
+						err = .Key_Too_Long
+						return
+					}
 
 					key_buffer[idx] = r
 					key_len += 1
@@ -301,10 +316,13 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 			else { // no type determined yet
 				switch c {
 				case '#':
-					panicl(path, line, column, "Declarations must be of the form key = value, unexpected comment found")
+					errorl(path, line, column, "Declarations must be of the form key = value, unexpected comment found")
+					err = .Syntax_Error_Decl_Comment
+					return
 				case '\n':
 					if array_depth == 0 {
-						panicl(path, line, column, "Declarations must be on the same line")
+						errorl(path, line, column, "Declarations must be on the same line")
+						err = .Syntax_Error_Decl_Linebreak
 					}
 				case '"':
 					if len(content) > i + 3 && content[i+1] == '"' && content[i+2] == '"' {
@@ -334,7 +352,11 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 						// remove(&arrays, array_depth-1)
 						key_len = 0
 					}
-					else do panicl(path, line, column, "Should not be closing array before opening it, my bad")
+					else {
+						errorl(path, line, column, "Should not be closing array before opening it, my bad")
+						err = .Array_Close_Before_Open
+						return
+					}
 				case '[':
 					value_type = nil
 					array_depth += 1
@@ -468,7 +490,11 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 						else if strings.contains(value, ".") {
 							real_value, _ := strings.replace(value, "_", "", -1, allocator=temp_allocator)
 							double, ok := strconv.parse_f64(real_value)
-							if !ok do panicl(path, line, column, "Expected a float but could not parse", real_value)
+							if !ok {
+								errorl(path, line, column, "Expected a float but could not parse", real_value)
+								err = .Float_Parse_Error
+								return
+							}
 							value_type = nil
 							if sign, ok := leading_sign.?; ok do double *= f64(sign)
 							leading_sign = nil
@@ -501,7 +527,11 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 						else {
 							real_value, _ := strings.replace(value, "_", "", -1, allocator=temp_allocator)
 							double, ok := strconv.parse_i64(real_value)
-							if !ok do panicl(path, line, column, "Expected an int but could not parse", real_value)
+							if !ok {
+								errorl(path, line, column, "Expected an int but could not parse", real_value)
+								err = .Int_Parse_Error
+								return
+							}
 							value_type = nil
 							if sign, ok := leading_sign.?; ok do double *= i64(sign)
 							leading_sign = nil

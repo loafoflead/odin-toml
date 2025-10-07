@@ -5,6 +5,8 @@ The parser does not support unmarshalling or even writing TOML yet, just reading
 The implementation is close to the spec, but not quite there, here is a list of weak points:
 - Raw and multi-line strings aren't airtight, need work
 
+To build and run the tests, just use `odin test tests/`. I'm assuming you have the Odin compiler and know what the language is, otherwise check out the [Overview](https://odin-lang.org/docs/overview/) for an idea, and the [site](https://odin-lang.org) for installation instructions. 
+
 ## Example:
 
 simple.toml
