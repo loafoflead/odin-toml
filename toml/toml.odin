@@ -28,7 +28,7 @@ Toml_Map :: map[Toml_Key]Toml_Value
 
 Toml_Value :: union {
 	string,
-	int,
+	i64,
 	f64,
 	bool,
 	// TODO: Support date offsets ( I dont understand how Odin does this :[ )
@@ -500,10 +500,10 @@ parse_from_filepath :: proc(path: string, data_allocator := context.allocator, t
 						}
 						else {
 							real_value, _ := strings.replace(value, "_", "", -1, allocator=temp_allocator)
-							double, ok := strconv.parse_int(real_value)
+							double, ok := strconv.parse_i64(real_value)
 							if !ok do panicl(path, line, column, "Expected an int but could not parse", real_value)
 							value_type = nil
-							if sign, ok := leading_sign.?; ok do double *= int(sign)
+							if sign, ok := leading_sign.?; ok do double *= i64(sign)
 							leading_sign = nil
 							if array_depth > 0 {
 								append(&arrays[array_depth-1], double)
