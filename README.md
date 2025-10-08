@@ -11,9 +11,12 @@ To build and run the tests, just use `odin test tests/`. I'm assuming you have t
 
 - https://github.com/mkozhukh/odin-toml -- Probably the best one out there, spec compliant and supports marshalling and unmarshalling with a simple interface.
 - https://codeberg.org/spindlebink/toml-odin -- Bindings to the [tomlc99](https://github.com/cktan/tomlc99) library in Odin, professional.
+- https://github.com/Up05/toml_parser -- An almost immediate-mode style parser with an intuitive and Odin-like style of parsing that takes advantage of or_else and similar to make walking the file simple and quite readable. Also the project with some of the best documentation readily available on its repository.
 - https://gitlab.com/froge/toml-odin -- Not totally spec compliant but quite clean code that looks like it would be nice for hacking at, a stepping parser too allowing the user to do their own step parsing (like the visitor pattern).
 
-If you know of any others that you think should be on this list of better parsers on this parser's github page that shan't be seen by anybody, feel free to make an issue (/hj).
+If you know of any others that you think should be on this list of better parsers on this parser's github page that shan't be seen by anybody, feel free to make an issue (/hj). The above is just a list of things I found searching on the discord.
+
+Note: https://pkg-odin.org/ is a repository of Odin packages if you would like to search it.
 
 ## Example:
 
